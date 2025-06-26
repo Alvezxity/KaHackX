@@ -39,7 +39,7 @@ Please read the guidelines below to make the contribution process smooth for eve
 
 ## Other Ways to Help
 
-- Report bugs or issues using the [Issues](../../issues) tab.
+- Report bugs or issues by contacting me (BELOW)
 - Suggest new features or improvements.
 - Help improve the documentation.
 
