@@ -1,0 +1,726 @@
+// ==UserScript==
+// @name         KaHackX!
+// @namespace    https://github.com/Alvezxity
+// @version      1.0.38
+// @description  KaHackX! For Kahoot to view correct answers
+// @author       Alvezxity; https://github.com/Alvezxity
+// @match        https://kahoot.it/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=kahoot.it
+// @grant        none
+// ==/UserScript==
+
+(function() {
+var Version = '1.0.38';
+
+var questions = [];
+var info = {
+    numQuestions: 0,
+    questionNum: -1,
+    lastAnsweredQuestion: -1,
+    defaultIL:true,
+    ILSetQuestion:-1,
+};
+var PPT = 950;
+var Answered_PPT = 950;
+var autoAnswer = false;
+var showAnswers = false;
+var inputLag = 100;
+
+// --- FONT, GLOBAL, & UI STYLES ---
+const fontStyle = document.createElement('style');
+fontStyle.textContent = `
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&display=swap');
+body, .floating-ui {
+  font-family: 'Montserrat', Arial, Helvetica, sans-serif !important;
+}
+.floating-ui * {
+  color: #ececf1 !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em;
+}
+.floating-ui h1, .floating-ui h2, .floating-ui span, .floating-ui label, .floating-ui a {
+  color: #ececf1 !important;
+}
+.floating-ui h1, .floating-ui h2 {
+  font-weight: 700 !important;
+}
+::-webkit-input-placeholder { color: #343541; }
+::-moz-placeholder { color: #343541; }
+:-ms-input-placeholder { color: #343541; }
+::placeholder { color: #343541; }
+`;
+document.head.appendChild(fontStyle);
+
+// --- Uiverse.io Jaareet Input Style + Border Color Logic ---
+const inputBarStyle = document.createElement("style");
+inputBarStyle.textContent = `
+.kahackx-input-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.kahackx-input-label {
+  font-family: 'Montserrat', Arial, Helvetica, sans-serif !important;
+  font-weight: 700;
+  font-size: 2.4em;
+  color: #ececf1;
+  text-align: center;
+  letter-spacing: 0.07em;
+  margin-bottom: 18px;
+  margin-top: 35px;
+  width: 100%;
+  display: block;
+}
+.kahackx-input {
+  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Roboto","Oxygen","Ubuntu","Cantarell","Fira Sans","Droid Sans","Helvetica Neue",sans-serif;
+  font-weight: 500;
+  font-size: 1.15em;
+  color: #111 !important;
+  background-color: rgb(28,28,30);
+  box-shadow: 0 0 13px rgba(0,0,0,0.28), 0 0 0 2.5px transparent;
+  border-radius: 0.5em;
+  border: 2.5px solid transparent;
+  outline: none;
+  padding: 0.65em 0.95em;
+  max-width: 310px;
+  width: 310px;
+  transition: .25s;
+}
+.kahackx-input:hover {
+  box-shadow: 0 0 0 3px rgba(135, 207, 235, 0.18);
+}
+.kahackx-input:focus {
+  box-shadow: 0 0 0 3px skyblue;
+}
+.kahackx-input.valid {
+  border-color: #22dd55 !important;
+  box-shadow: 0 0 0 2px #22dd5577 !important;
+}
+.kahackx-input.invalid {
+  border-color: #E53935 !important;
+  box-shadow: 0 0 0 2px #E5393577 !important;
+}
+.quiz-id-display {
+  display: none !important;
+}
+.kahackx-input::placeholder {
+  color: #343541 !important;
+}
+`;
+document.head.appendChild(inputBarStyle);
+
+// --- Switches (vertical, big font, spaced) ---
+const switchStyle = document.createElement('style');
+switchStyle.textContent = `
+.switch-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 44px auto 8px auto;
+  width: 97%;
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0;
+}
+.switch-label {
+  font-size: 1.38em;
+  font-weight: 700;
+  color: #ececf1;
+  user-select: none;
+  cursor: pointer;
+  min-width: 168px;
+  letter-spacing: 0.03em;
+}
+.switch {
+  font-size: 23px;
+  position: relative;
+  display: inline-block;
+  width: 3.6em;
+  height: 2.15em;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgb(182, 182, 182);
+  transition: .4s;
+  border-radius: 10px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 1.5em;
+  width: 1.5em;
+  border-radius: 8px;
+  left: 0.34em;
+  bottom: 0.33em;
+  transform: rotate(270deg);
+  background-color: rgb(255, 255, 255);
+  transition: .4s;
+}
+.switch input:checked + .slider {
+  background-color: #21cc4c;
+}
+.switch input:focus + .slider {
+  box-shadow: 0 0 1px #2196F3;
+}
+.switch input:checked + .slider:before {
+  transform: translateX(1.55em);
+}
+`;
+document.head.appendChild(switchStyle);
+
+// --- Handle Bar & Button Styles ---
+const handleBarStyle = document.createElement('style');
+handleBarStyle.textContent = `
+.kahackx-handle {
+  display: flex;
+  align-items: center;
+  background-color: #444654;
+  border-radius: 1vw 1vw 0 0;
+  height: 2.5vw;
+  min-height: 36px;
+  padding-left: 2.5%;
+  position: relative;
+  user-select: none;
+}
+.kahackx-handle-title {
+  font-family: 'Montserrat', Arial, Helvetica, sans-serif;
+  font-size: 1.4em;
+  color: #ececf1;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+  flex-grow: 1;
+  margin-right: 0;
+  margin-top: 2px;
+  line-height: 1.1em;
+  white-space: nowrap;
+}
+.kahackx-handle-btn {
+  width: 38px;
+  height: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  font-size: 1.7em;
+  background: none;
+  transition: background 0.14s;
+  position: relative;
+  z-index: 10;
+}
+.kahackx-handle-btn:hover,
+.kahackx-handle-btn:focus {
+  outline: none;
+}
+.kahackx-handle-btn-close {
+  color: #ececf1;
+}
+.kahackx-handle-btn-min {
+  color: #ececf1;
+}
+.kahackx-handle-btn-box {
+  background: transparent;
+  width: 38px;
+  height: 100%;
+  border-radius: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.14s;
+}
+.kahackx-handle-btn-box:hover {
+  background: #233b8b;
+}
+.kahackx-handle-btn-close-box:hover {
+  background: #E53935;
+}
+.kahackx-handle-btn-box,
+.kahackx-handle-btn-close-box {
+  background: transparent;
+}
+`;
+document.head.appendChild(handleBarStyle);
+
+// --- UI ---
+const uiElement = document.createElement('div');
+uiElement.className = 'floating-ui';
+uiElement.style.position = 'absolute';
+uiElement.style.top = '5%';
+uiElement.style.left = '5%';
+uiElement.style.width = '440px';
+uiElement.style.backgroundColor = '#343541';
+uiElement.style.borderRadius = '1vw';
+uiElement.style.boxShadow = '0 2px 16px 0 rgba(0,0,0,0.25)';
+uiElement.style.zIndex = '9999';
+uiElement.style.fontFamily = 'Montserrat, Arial, Helvetica, sans-serif';
+
+// HANDLE (modern, smaller, new buttons)
+const handle = document.createElement('div');
+handle.className = 'kahackx-handle';
+handle.setAttribute('aria-label', 'Move KaHackX UI');
+// Title
+const handleTitle = document.createElement('span');
+handleTitle.className = 'kahackx-handle-title';
+handleTitle.textContent = 'KaHackX!';
+handle.appendChild(handleTitle);
+// Minimize
+const minimizeBtnBox = document.createElement('span');
+minimizeBtnBox.className = 'kahackx-handle-btn-box';
+const minimizeButton = document.createElement('button');
+minimizeButton.className = 'kahackx-handle-btn kahackx-handle-btn-min';
+minimizeButton.textContent = '─';
+minimizeButton.setAttribute('aria-label', 'Minimize');
+minimizeButton.style.background = "none";
+minimizeBtnBox.appendChild(minimizeButton);
+handle.appendChild(minimizeBtnBox);
+// Close
+const closeBtnBox = document.createElement('span');
+closeBtnBox.className = 'kahackx-handle-btn-box kahackx-handle-btn-close-box';
+const closeButton = document.createElement('button');
+closeButton.className = 'kahackx-handle-btn kahackx-handle-btn-close';
+closeButton.textContent = '✕';
+closeButton.setAttribute('aria-label', 'Close');
+closeButton.style.background = "none";
+closeBtnBox.appendChild(closeButton);
+handle.appendChild(closeBtnBox);
+
+uiElement.appendChild(handle);
+
+// QUIZ ID LABEL
+const quizIdLabel = document.createElement('div');
+quizIdLabel.className = 'kahackx-input-label';
+quizIdLabel.textContent = 'QUIZ ID';
+quizIdLabel.style.marginTop = '35px';
+uiElement.appendChild(quizIdLabel);
+
+// --- Newline/gap between the QUIZ ID text and the box ---
+const quizIdGap = document.createElement('div');
+quizIdGap.className = "quiz-id-gap";
+quizIdGap.style.height = "18px";
+uiElement.appendChild(quizIdGap);
+
+// --- Game ID Bar (Uiverse.io) ---
+const inputContainer = document.createElement('div');
+inputContainer.className = 'kahackx-input-container';
+
+const inputBox = document.createElement('input');
+inputBox.type = 'text';
+inputBox.className = 'kahackx-input';
+inputBox.placeholder = 'Quiz Id here...';
+inputBox.setAttribute('aria-label', 'Quiz Id');
+inputBox.style.fontWeight = '600';
+inputContainer.appendChild(inputBox);
+uiElement.appendChild(inputContainer);
+
+// --- Remove QUIZ ID under text input (quizIdDisplay) ---
+const quizIdDisplay = document.createElement('div');
+quizIdDisplay.className = "quiz-id-display";
+uiElement.appendChild(quizIdDisplay);
+
+// --- Points Slider (below Quiz ID) ---
+const sliderContainer = document.createElement('div');
+sliderContainer.style.width = '80%';
+sliderContainer.style.margin = '18px auto 0.5vw auto';
+sliderContainer.style.display = 'flex';
+sliderContainer.style.alignItems = 'center';
+sliderContainer.style.justifyContent = 'center';
+sliderContainer.style.flexDirection = 'column';
+
+const pointsSliderLabel = document.createElement('span');
+pointsSliderLabel.textContent = 'Points per Question: 950';
+pointsSliderLabel.style.fontFamily = 'Montserrat, Arial, Helvetica, sans-serif';
+pointsSliderLabel.style.fontSize = '1.2em';
+pointsSliderLabel.style.margin = '0 0 7px 0';
+pointsSliderLabel.style.color = '#ececf1';
+pointsSliderLabel.setAttribute('aria-live', 'polite');
+sliderContainer.appendChild(pointsSliderLabel);
+
+const pointsSlider = document.createElement('input');
+pointsSlider.type = 'range';
+pointsSlider.min = '500';
+pointsSlider.max = '1000';
+pointsSlider.value = '950';
+pointsSlider.style.width = '90%';
+pointsSlider.style.marginLeft = '0vw';
+pointsSlider.style.marginRight = '0vw';
+pointsSlider.style.border = 'none';
+pointsSlider.style.outline = 'none';
+pointsSlider.style.cursor = 'ew-resize';
+pointsSlider.setAttribute('aria-label', 'Points per Question');
+sliderContainer.appendChild(pointsSlider);
+uiElement.appendChild(sliderContainer);
+
+pointsSlider.addEventListener('input', () => {
+    const points = +pointsSlider.value;
+    PPT = points;
+    pointsSliderLabel.textContent = 'Points per Question: ' + points;
+});
+
+// --- Switches (vertical, big font, spaced) ---
+function makeSwitchRow(labelText, id, checked, onChange) {
+    const row = document.createElement("div");
+    row.className = "switch-row";
+    const label = document.createElement("span");
+    label.className = "switch-label";
+    label.textContent = labelText;
+    row.appendChild(label);
+
+    const switchDiv = document.createElement("label");
+    switchDiv.className = "switch";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.id = id;
+    input.checked = checked;
+    input.tabIndex = 0;
+    const slider = document.createElement("span");
+    slider.className = "slider";
+    switchDiv.appendChild(input);
+    switchDiv.appendChild(slider);
+
+    input.addEventListener("change", () => onChange(input.checked));
+    row.appendChild(switchDiv);
+    return row;
+}
+
+const switchBar = document.createElement('div');
+switchBar.className = 'switch-bar';
+
+let _showAnswers = false, _autoAnswer = false;
+switchBar.appendChild(
+  makeSwitchRow("Reveal Answer", "show-answers-switch", false, v => { _showAnswers = v; showAnswers = v; })
+);
+switchBar.appendChild(
+  makeSwitchRow("Auto Answer", "auto-answer-switch", false, v => { _autoAnswer = v; autoAnswer = v; info.ILSetQuestion = info.questionNum; })
+);
+uiElement.appendChild(switchBar);
+
+// INFO SECTION
+const header4 = document.createElement('h2');
+header4.textContent = 'INFO';
+header4.style.display = 'block';
+header4.style.margin = '2vw 0 0.5vw 0';
+header4.style.textAlign = 'center';
+header4.style.fontFamily = 'Montserrat, Arial, Helvetica, sans-serif';
+header4.style.fontSize = '2vw';
+header4.style.color = '#ececf1';
+header4.style.textShadow = `
+  -1px -1px 0 #23242b,
+  1px -1px 0 #23242b,
+  -1px 1px 0 #23242b,
+  1px 1px 0 #23242b
+`;
+uiElement.appendChild(header4);
+
+const questionsLabel = document.createElement('span');
+questionsLabel.textContent = 'Question 0 / 0';
+questionsLabel.style.display = 'block';
+questionsLabel.style.fontFamily = 'Montserrat, Arial, Helvetica, sans-serif';
+questionsLabel.style.fontSize = '1.1vw';
+questionsLabel.style.textAlign = 'center';
+questionsLabel.style.margin = '1vw';
+questionsLabel.style.marginLeft = '1vw';
+questionsLabel.style.marginRight = '1vw';
+questionsLabel.style.color = '#19c37d';
+questionsLabel.setAttribute('aria-live', 'polite');
+uiElement.appendChild(questionsLabel);
+
+const inputLagLabel = document.createElement('span');
+inputLagLabel.textContent = 'Input lag : 125 ms';
+inputLagLabel.style.display = 'block';
+inputLagLabel.style.fontFamily = 'Montserrat, Arial, Helvetica, sans-serif';
+inputLagLabel.style.fontSize = '1.1vw';
+inputLagLabel.style.textAlign = 'center';
+inputLagLabel.style.margin = '1vw';
+inputLagLabel.style.marginLeft = '1vw';
+inputLagLabel.style.marginRight = '1vw';
+inputLagLabel.style.color = '#19c37d';
+inputLagLabel.setAttribute('aria-live', 'polite');
+uiElement.appendChild(inputLagLabel);
+
+const versionLabel = document.createElement('h1');
+versionLabel.textContent = 'KaHackX! V'+Version;
+versionLabel.style.fontFamily = 'Montserrat, Arial, Helvetica, sans-serif';
+versionLabel.style.fontSize = '2vw';
+versionLabel.style.display = 'block';
+versionLabel.style.textAlign = 'center';
+versionLabel.style.marginTop = '2vw';
+versionLabel.style.marginLeft = '1vw';
+versionLabel.style.marginRight = '1vw';
+versionLabel.style.color = '#19c37d';
+uiElement.appendChild(versionLabel);
+
+const githubContainer = document.createElement('div');
+githubContainer.style.textAlign = 'center';
+githubContainer.style.marginTop = '1vw';
+
+const githubLabel = document.createElement('span');
+githubLabel.textContent = 'GitHub: ';
+githubLabel.style.fontFamily = 'Montserrat, Arial, Helvetica, sans-serif';
+githubLabel.style.fontSize = '1.1vw';
+githubLabel.style.margin = '0 1vw';
+githubLabel.style.color = '#ececf1';
+githubContainer.appendChild(githubLabel);
+
+const githubUrl = document.createElement('a');
+githubUrl.textContent = 'Alvezxity';
+githubUrl.href = 'https://github.com/Alvezxity';
+githubUrl.target = '_blank';
+githubUrl.style.fontFamily = 'Montserrat, Arial, Helvetica, sans-serif';
+githubUrl.style.fontSize = '1.1vw';
+githubUrl.style.margin = '0 1vw';
+githubUrl.style.color = '#19c37d';
+githubUrl.setAttribute('aria-label', 'Alvezxity GitHub');
+githubContainer.appendChild(githubUrl);
+
+uiElement.appendChild(githubContainer);
+
+// ----- UI BUTTON LOGIC -----
+closeButton.addEventListener('click', () => {
+    document.body.removeChild(uiElement);
+    autoAnswer = false;
+    showAnswers = false;
+});
+closeButton.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === " ") closeButton.click();
+});
+minimizeButton.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === " ") minimizeButton.click();
+});
+
+// Hover coloring for buttons (invisible box until hovered)
+minimizeBtnBox.style.background = "transparent";
+closeBtnBox.style.background = "transparent";
+minimizeBtnBox.addEventListener("mouseenter", () => minimizeBtnBox.style.background = "#233b8b");
+minimizeBtnBox.addEventListener("mouseleave", () => minimizeBtnBox.style.background = "transparent");
+closeBtnBox.addEventListener("mouseenter", () => closeBtnBox.style.background = "#E53935");
+closeBtnBox.addEventListener("mouseleave", () => closeBtnBox.style.background = "transparent");
+
+let isMinimized = false;
+
+minimizeButton.addEventListener('click', () => {
+    isMinimized = !isMinimized;
+    [quizIdLabel, header4, inputContainer, quizIdGap, quizIdDisplay, questionsLabel, versionLabel, inputLagLabel, githubContainer, sliderContainer, switchBar].forEach(el => {
+        if (!el) return;
+        el.style.display = isMinimized ? 'none' : (el === inputContainer ? 'flex' : (el === sliderContainer || el === switchBar ? 'flex' : 'block'));
+    });
+    uiElement.style.height = isMinimized ? '2.5vw' : 'auto';
+    handle.style.height = isMinimized ? '100%' : '2.5vw';
+    minimizeBtnBox.style.height = closeBtnBox.style.height = isMinimized ? '100%' : '2.5vw';
+});
+
+let isDragging = false;
+let offsetX, offsetY;
+
+handle.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    offsetX = e.clientX - uiElement.getBoundingClientRect().left;
+    offsetY = e.clientY - uiElement.getBoundingClientRect().top;
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+        const x = e.clientX - offsetX;
+        const y = e.clientY - offsetY;
+        uiElement.style.left = x + 'px';
+        uiElement.style.top = y + 'px';
+    }
+});
+document.addEventListener('mouseup', () => {
+    isDragging = false;
+});
+
+// ----- QUIZ ID VALIDATION + COLOR LOGIC -----
+function FindByAttributeValue(attribute, value, element_type)    {
+  element_type = element_type || "*";
+  var All = document.getElementsByTagName(element_type);
+  for (var i = 0; i < All.length; i++)       {
+    if (All[i].getAttribute(attribute) == value) { return All[i]; }
+  }
+}
+
+function parseQuestions(questionsJson){
+    let questions = []
+    questionsJson.forEach(function (question){
+        let q = {type:question.type, time:question.time}
+        if (['quiz', 'multiple_select_quiz'].includes(question.type)){
+            var i=0
+            q.answers = []
+            q.incorrectAnswers = []
+            question.choices.forEach(function(choise){
+                if (choise.correct) {
+                    q.answers.push(i)
+                } else{
+                    q.incorrectAnswers.push(i)
+                }
+                i++
+            })
+        }
+        if (question.type == 'open_ended') {
+            q.answers = []
+            question.choices.forEach(function(choise){
+                q.answers.push(choise.answer)
+            })
+        }
+        questions.push(q)
+    })
+    return questions
+}
+
+function setInputStatus(status) {
+    // status: "none", "valid", "invalid"
+    inputBox.classList.remove("valid", "invalid");
+    if (status === "valid") inputBox.classList.add("valid");
+    else if (status === "invalid") inputBox.classList.add("invalid");
+}
+
+function handleInputChange() {
+    const quizID = inputBox.value;
+    const url = 'https://kahoot.it/rest/kahoots/' + quizID;
+    if (quizID != "") {
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error('');
+                return response.json();
+            })
+            .then(data => {
+                setInputStatus("valid");
+                questions=parseQuestions(data.questions)
+                info.numQuestions=questions.length
+            })
+            .catch(error => {
+                setInputStatus("invalid");
+                info.numQuestions = 0
+            });
+    } else {
+        setInputStatus("none");
+        info.numQuestions = 0
+    }
+}
+
+inputBox.addEventListener('input', handleInputChange);
+
+document.body.appendChild(uiElement);
+
+function onQuestionStart(){
+    var question = questions[info.questionNum]
+    if (showAnswers){
+        highlightAnswers(question)
+    }
+    if (autoAnswer){
+        answer(question, (question.time - question.time / (500/(PPT-500))) - inputLag)
+    }
+}
+
+function highlightAnswers(question){
+    question.answers.forEach(function (answer) {
+        setTimeout(function() {
+            FindByAttributeValue("data-functional-selector", 'answer-'+answer, "button").style.backgroundColor = '#19c37d'
+            FindByAttributeValue("data-functional-selector", 'answer-'+answer, "button").style.color = '#fff'
+        }, 0)
+    })
+    question.incorrectAnswers.forEach(function (answer) {
+        setTimeout(function() {
+            FindByAttributeValue("data-functional-selector", 'answer-'+answer, "button").style.backgroundColor = '#E53935'
+            FindByAttributeValue("data-functional-selector", 'answer-'+answer, "button").style.color = '#fff'
+        }, 0)
+    })
+}
+
+function answer(question, time) {
+    Answered_PPT = PPT
+    var delay = 0
+    if (question.type == 'multiple_select_quiz') delay = 60
+    setTimeout(function() {
+        if (question.type == 'quiz') {
+            const key=(+question.answers[0]+1).toString();
+            const event = new KeyboardEvent('keydown', { key });
+            window.dispatchEvent(event);
+        }
+        if (question.type == 'multiple_select_quiz') {
+            question.answers.forEach(function (answer) {
+                setTimeout(function() {
+                    const key=(+answer+1).toString();
+                    const event = new KeyboardEvent('keydown', { key });
+                    window.dispatchEvent(event);
+                }, 0)
+            })
+            setTimeout(function() {
+                FindByAttributeValue("data-functional-selector", 'multi-select-submit-button', "button").click()
+            }, 0)
+        }
+    }, time - delay)
+}
+
+let isHidden = false;
+document.addEventListener('keydown', (event)=> {
+    if (event.key == "h"  && event.altKey)
+    {
+        isHidden = !isHidden
+    }
+    if (event.key == "x" && event.altKey){
+        document.body.removeChild(uiElement);
+        autoAnswer = false;
+        showAnswers = false;
+    }
+    if (isHidden)
+    {
+        uiElement.style.display = 'none'
+    }
+    else
+    {
+        uiElement.style.display = 'block'
+    }
+})
+
+setInterval(function () {
+    var textElement = FindByAttributeValue("data-functional-selector", "question-index-counter", "div")
+    if (textElement){
+        info.questionNum = +textElement.textContent - 1
+    }
+    if (FindByAttributeValue("data-functional-selector", 'answer-0', "button") && info.lastAnsweredQuestion != info.questionNum)
+    {
+        info.lastAnsweredQuestion = info.questionNum
+        onQuestionStart()
+    }
+    if (autoAnswer){
+        if (info.ILSetQuestion != info.questionNum){
+            var ppt = Answered_PPT
+            if (ppt > 987) ppt = 1000
+            var incrementElement = FindByAttributeValue("data-functional-selector", "score-increment", "span")
+            if (incrementElement){
+                info.ILSetQuestion = info.questionNum
+                var increment = +incrementElement.textContent.split(" ")[1]
+                if (increment != 0){
+                    inputLag += (ppt-increment)*15
+                    if (inputLag < 0) {
+                        inputLag -= (ppt-increment)*15
+                        inputLag += (ppt-increment/2)*15
+                    }
+                    inputLag = Math.round(inputLag)
+                }
+            }
+        }
+    }
+    questionsLabel.textContent = 'Question '+(info.questionNum+1)+' / '+info.numQuestions;
+    inputLagLabel.textContent = 'Input lag : '+inputLag+' ms';
+}, 1)
+})();
